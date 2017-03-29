@@ -5,7 +5,6 @@
 |                  | |__|  __/   <\__ \ |_| \__ \    | || |\  || ||  __/ (_| | |  \__ \  __/ |                  |
 |                  |_____\___|_|\_\___/\__, |___/   |___|_| \_|___|_|   \__,_|_|  |___/\___|_|                  |
 |                                      |___/                                                                    |
-|                                                                                             by Borovik Alexey |
 /===============================================================================================================/
 | All-in-one INI file parser                                                                                    |
 | Provides convenient cross-platform class to load and save .INI files                                          |
@@ -50,9 +49,10 @@
 #include <algorithm>  // for std::transform
 #include <functional> // for std::not1, std::ptr_fun
 #include <cctype>     // for std::isspace()
-#include <locale>     // for std::isspace() in current locale
+#include <ctype.h>    // for tolower() and toupper()
 #include <fstream>    // for std::fstream
 #include <string.h>   // for strlen()
+#include <iomanip>    // for std::setprecision
 /*---------------------------------------------------------------------------------------------------------------/
 / Defines & Settings
 /---------------------------------------------------------------------------------------------------------------*/
@@ -113,47 +113,45 @@ namespace INI
 		std::transform(str.begin(), str.end(), str.begin(), ::toupper);
 	}
 
+	/// stream to be used for conversions
+	class convstream: public std::stringstream
+	{
+	public:
+		convstream() {*this << std::setprecision(17) << std::boolalpha;}
+	};
+
 	/// Convert anything (int, double etc) to string
 	template<class T> std::string t_to_string(const T& i)
 	{
-		std::stringstream ss;
+		convstream ss;
 		std::string s;
 		ss << i;
 		s = ss.str();
 		return s;
 	}
 	/// Special case for string (to avoid overheat)
-	template<> std::string t_to_string<std::string>(const std::string& i)
+	template<> inline std::string t_to_string<std::string>(const std::string& i)
 	{ 
 		return i; 
-	}
-	/// Special case for boolean value
-	template<> std::string t_to_string<bool>(const bool& i)
-	{
-		std::stringstream ss;
-		std::string s;
-		ss << std::boolalpha << i;
-		s = ss.str();
-		return s;
 	}
 
 	/// Convert string to anything (int, double, etc)
 	template<class T> T string_to_t(const std::string& v)
 	{
-		std::stringstream ss;
+		convstream ss;
 		T out;
 		ss << v;
 		ss >> out;
 		return out;
 	}
 	/// Special case for string
-	template<> std::string string_to_t<std::string>(const std::string& v)
+	template<> inline std::string string_to_t<std::string>(const std::string& v)
 	{
 		return v;
 	}
 	/// Special case for boolean value
 	/// std::boolalpha only covers 'true' or 'false', while we have more cases
-	template<> bool string_to_t<bool>(const std::string& v)
+	template<> inline bool string_to_t<bool>(const std::string& v)
 	{
 		if (!v.size())
 			return false;
@@ -162,15 +160,23 @@ namespace INI
 		return false;
 	}
 
+	// Calling isspace with signed chars in Visual Studio causes assert failure in DEBUG builds
+	// This hack is approved by MS itself
+#if defined (_MSC_VER)
+	static inline int __in_isspace(int ch) {return std::isspace((unsigned char)ch);}
+#else
+#	define __in_isspace std::isspace
+#endif
+
 	// Trim string from start
 	static inline std::string &ltrim(std::string &s) {
-		s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+		s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(__in_isspace))));
 		return s;
 	}
 
 	// Trim string from end
 	static inline std::string &rtrim(std::string &s) {
-		s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
+		s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(__in_isspace))).base(), s.end());
 		return s;
 	}
 
@@ -225,7 +231,7 @@ namespace INI
 	}
 
 	// Replace every occurrence of @param what to @param ret in @param str
-	std::string& str_replace(std::string& str, const std::string& what, const std::string& rep)
+	static inline std::string& str_replace(std::string& str, const std::string& what, const std::string& rep)
 	{
 		int diff = rep.size() - what.size() + 1;
 		for (size_t pos = 0; ;pos += diff)
@@ -239,7 +245,7 @@ namespace INI
 	}
 
 	// normalize path (for relative path to be system-independent)
-	void normalize_path(std::string& path)
+	static inline void normalize_path(std::string& path)
 	{
 #ifdef WIN32
 		str_replace(path,"/","\\");
@@ -249,7 +255,7 @@ namespace INI
 	}
 
 	// get file path (excluding file name)
-	std::string file_path(const std::string& file_fullname)
+	static inline std::string file_path(const std::string& file_fullname)
 	{
 		size_t pos = file_fullname.rfind(SYSTEM_PATH_DELIM);
 		if (pos == std::string::npos)
@@ -258,7 +264,7 @@ namespace INI
 	}
 
 	// get file name (excluding file path)
-	std::string file_name(const std::string& file_fullname)
+	static inline std::string file_name(const std::string& file_fullname)
 	{
 		size_t pos = file_fullname.rfind(SYSTEM_PATH_DELIM);
 		if (pos == std::string::npos)
@@ -267,7 +273,7 @@ namespace INI
 	}
 
 	// check whether path is absolute
-	bool path_is_absolute(const std::string& path)
+	static inline bool path_is_absolute(const std::string& path)
 	{
 #ifdef WIN32
 		if (path.size() < 2)
@@ -288,7 +294,7 @@ namespace INI
 	}
 
 	// check whether path is relative
-	bool path_is_relative(const std::string& path) {return !path_is_absolute(path);}
+	static inline bool path_is_relative(const std::string& path) {return !path_is_absolute(path);}
 
 	/*---------------------------------------------------------------------------------------------------------------/
 	/ INI-related classes
@@ -332,7 +338,7 @@ namespace INI
 				return T();
 			return string_to_t<T>(_ptr->str);
 		}
-		inline void Set(const std::string& str)
+		void Set(const std::string& str)
 		{
 			Decrement();
 			_ptr = new val_cont();
@@ -388,7 +394,7 @@ namespace INI
 			std::string str;
 			size_t count;
 		};
-		inline void Decrement()
+		void Decrement()
 		{
 			if (!_ptr)
 				return;
@@ -399,7 +405,7 @@ namespace INI
 				_ptr = NULL;
 			}
 		}
-		inline void Increment()
+		void Increment()
 		{
 			if (_ptr)
 				_ptr->count++;
@@ -524,7 +530,7 @@ namespace INI
 			std::vector<Value> vector;
 			size_t count;
 		};
-		inline void Decrement()
+		void Decrement()
 		{
 			if (!_ptr)
 				return;
@@ -535,7 +541,7 @@ namespace INI
 				_ptr = NULL;
 			}
 		}
-		inline void Increment()
+		void Increment()
 		{
 			if (_ptr)
 				_ptr->count++;
@@ -554,17 +560,17 @@ namespace INI
 		ar_cont* _ptr;
 	};
 
-	template<> void Value::Set<Array> (const Array& value)
+	template<> inline void Value::Set<Array> (const Array& value)
 	{
 		Set(value.ToString());
 	}
-	template<> Array Value::Get<Array>() const
+	template<> inline Array Value::Get<Array>() const
 	{
 		if (!_ptr)
 			return Array();
 		return Array(_ptr->str);
 	}
-	Array Value::AsArray() const {return Get<Array>();}
+	inline Array Value::AsArray() const {return Get<Array>();}
 
 	/*---------------------------------------------------------------------------------------------------------------/
 	/ INI file creation and parsing
@@ -1093,6 +1099,7 @@ namespace INI
 					else
 						fpath = incname;
 					std::ifstream file(fpath.c_str(), std::ios::in);
+					std::string prevfn = _result.file_name;
 					_result.file_name = fpath;
 					if (!file.is_open())
 					{
@@ -1106,6 +1113,7 @@ namespace INI
 						scname = def_section;
 					if (!ParseStream(file,scname,file_path(fpath),pmap))
 						return 0;
+					_result.file_name = prevfn;
 					continue;
 				}
 				// Add comment (it can be set with any string type, other than EMPTY and ERROR)
@@ -1185,32 +1193,32 @@ namespace INI
 	/*-----------------------------------------------------------------------------------------------------------/
 	/ Some functions left unimplemented
 	/-----------------------------------------------------------------------------------------------------------*/
-	Section* Section::GetParent() {return _file->GetParentSection(this);}
-	Section* Section::FindParent() const {return _file->FindParentSection(this);}
-	Section* Section::GetSubSection(const std::string& name) {return _file->GetSubSection(this,name);}
-	Section* Section::FindSubSection(const std::string& name) const {return _file->FindSubSection(this,name);}
-	SectionVector Section::FindSubSections() const {return _file->FindSubSections(this);}
-	void Section::Save(std::ostream& stream) const {return _file->Save(stream,this);}
+	inline Section* Section::GetParent() {return _file->GetParentSection(this);}
+	inline Section* Section::FindParent() const {return _file->FindParentSection(this);}
+	inline Section* Section::GetSubSection(const std::string& name) {return _file->GetSubSection(this,name);}
+	inline Section* Section::FindSubSection(const std::string& name) const {return _file->FindSubSection(this,name);}
+	inline SectionVector Section::FindSubSections() const {return _file->FindSubSections(this);}
+	inline void Section::Save(std::ostream& stream) const {return _file->Save(stream,this);}
 }
 /*---------------------------------------------------------------------------------------------------------------/
 / Stream operators
 /---------------------------------------------------------------------------------------------------------------*/
-std::ostream& operator<< (std::ostream& stream, const INI::File& file)
+static inline std::ostream& operator<< (std::ostream& stream, const INI::File& file)
 {
 	file.Save(stream);
 	return stream;
 }
-std::ostream& operator<< (std::ostream& stream, const INI::Section* sect)
+static inline std::ostream& operator<< (std::ostream& stream, const INI::Section* sect)
 {
 	sect->Save(stream);
 	return stream;
 }
-std::ostream& operator<< (std::ostream& stream, const INI::Array& ar)
+static inline std::ostream& operator<< (std::ostream& stream, const INI::Array& ar)
 {
 	stream << ar.ToValue().AsString();
 	return stream;
 }
-std::istream& operator>> (std::istream& stream, INI::File& file)
+static inline std::istream& operator>> (std::istream& stream, INI::File& file)
 {
 	file.Load(stream,false);
 	return stream;

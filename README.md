@@ -1,4 +1,4 @@
-# Lek'sys INI Parser
+# Leksys' INI Parser
 
 Crossplatform all-in-one INI-file parser, written on C++ with STL
 ```
@@ -9,7 +9,7 @@ Crossplatform all-in-one INI-file parser, written on C++ with STL
 |  | |__|  __/   <\__ \ |_| \__ \    | || |\  || ||  __/ (_| | |  \__ \  __/ |       |
 |  |_____\___|_|\_\___/\__, |___/   |___|_| \_|___|_|   \__,_|_|  |___/\___|_|       |
 |                      |___/                                                         |
-|                                                                  by Borovik Alexey |
+|                                                                                    |
 +====================================================================================+ 
 ```
 
