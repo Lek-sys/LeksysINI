@@ -70,7 +70,8 @@ int main(int argc, char** argv)
 		INI::Section* sect = it->second;
 		// iterate over all entries in specific section
 		for (INI::Section::values_iter it2 = sect->ValuesBegin(); it2 != sect->ValuesEnd(); ++it2)
-			std::cout << "Entry name: " << it2->first << ", Entry value: " << it2->second.AsString() << std::endl;
+			std::cout << "Entry name: " << it2->first << ", Entry value: " 
+					  << it2->second.AsString() << std::endl;
 	}
 	// output to INI file
 	ft.Save("settings.ini");
@@ -109,7 +110,7 @@ array    = 1, 202.56, String with space, 5   ; Array
 ret      = String
 ret2     = 201
 
-[Settings.Sub2]
+[Main.Sub2]
 ; File contents of included file will be placed here
 ;#include settings/sub2.ini
 
