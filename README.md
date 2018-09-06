@@ -19,10 +19,12 @@ Crossplatform all-in-one INI-file parser, written on C++ with STL
   - Crossplatform (Windows & POSIX)
   - Nice and easy-to-use C++ interface
   - Extends standart INI interface with: 
-    - Arrays (comma-separated values) support
-    - Nested sections [parent.child] support
+    - Arrays (comma-separated values, i.e: "val1, val2, val3")
+    - Maps (comma-separated pairs, i.e.: "key1:value, key2: value")
+    - Nested sections (i.e.: "[parent.child]")
+    - Nested arrays and maps (i.e.: "val1,{val2.1,val2.2},{k31:v31, k32:v32}")
     - File includes (;#include <file_path>)
- - Can be used to save and load any user-defined classes, as long as stream operators are provided
+ - Can be used to save and load any user-defined classes, as long as stream operators are provided 
  - Supports multilines
  - Loads & saves comments
  - MIT license
@@ -80,11 +82,12 @@ int main(int argc, char** argv)
 }
 ```
 
-Look in provided test_app.cpp for more examples of using Leksys' IniParser, for example how to get and set comments and how to save and load your classes.
+Look in provided test_app.cpp for more examples of using Leksys' IniParser, for example how to get and set comments,
+how to work with maps and how to save and load your classes.
 
 ## INI file syntax
 
-Leksys' parser supports extended ini file syntax with comments, multilines, arrays, subsections and inclusions.
+Leksys' parser supports extended ini file syntax with comments, multilines, arrays, maps, subsections and inclusions.
 Check below.
 ```ini
 ; Comment line
@@ -104,6 +107,15 @@ double   = 2.303                             ; Double value
 str      = Hello! This is string!            ; String
 bool     = true                              ; Boolean value
 array    = 1, 202.56, String with space, 5   ; Array
+cmp_arr  = {12,3}, {13,5}, {18,9}            ; Array of arrays
+cmp_arr2 = a, b, {, String with ,}           ; Array with string, cont. separator
+cmp_arr3 = a, b, /, String with /,           ; Same as array cmp_arr2
+cmp_arr3 = a, b, String with /{ and /}       ; Array with string, cont. braces
+map      = 1:5, 1:3, 2:9, 3:10               ; Map
+cmp_map  = a:{1,5,7}, b: {str1, {2,3}}       ; Complex map with arrays as values
+cmp_map2 = a:{String with ,,}, b: String     ; Map with string, cont. separator
+cmp_map3 = a:String with /,/,, b: String     ; Same as cmp_map2
+cmp_map3 = a:String with /{ and /}, b: Str   ; Map with string, cont. braces
 
 ; Subsection (Sub1 is considered subsection of section Main)
 [Main.Sub1]

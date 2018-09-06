@@ -9,10 +9,13 @@
 | All-in-one INI file parser                                                                                    |
 | Provides convenient cross-platform class to load and save .INI files                                          |
 | Extends classic INI-file format with                                                                          |
-| -> arrays (comma (',') separated values)                                                                      |
-| -> nested sections (Section1 is considered child of Section2, if Section1 is defined as [Section2.Section1])  |
-| -> file includes (use ";#include <file_path>" to include file with relative or full-system path <file_path>)  |
+| -> arrays (comma (',') separated values: |val1, val2, val3|)                                                  |
+| -> maps (declared as |key1:val1, key2:val2, ... , keyN:valN|)                                                 |
+| -> nested sections (Section2 is considered child of Section1, if Section2 is defined as [Section1.Section2])  |
+| -> file includes (use ";#include <file_path>" to include file with relative or full system path <file_path>)  |
+| Please look in provided file ini-test/test1.ini for extended ini examples, in test_app.cpp for usage examples |
 | Language: C++, STL used                                                                                       |
+| Version:  1.1                                                                                                 |
 /===============================================================================================================/
 | Copyright (c) 2015 by Borovik Alexey
 | MIT License
@@ -76,10 +79,19 @@
 /// should be considered as current line's continuation
 #define INI_MULTILINE_CHARS		 "\\/"
 
-// Delimiter of values in array. Note: it is a string, not character
-#define INI_ARRAY_DELIMITER ","
+// Delimiter of values in array
+#define INI_ARRAY_DELIMITER         ','
+// Symbol, opening the segment of array (INI_ARRAY_DELIMITER in segment is not considered as delimiter)
+#define INI_ARRAY_SEGMENT_OPEN      '{'
+// Symbol, closing the segment of array
+#define INI_ARRAY_SEGMENT_CLOSE     '}'
+// Escape character in INI file (INI_ARRAY_SEGMENT_OPEN and INI_ARRAY_SEGMENT_CLOSE if found inside
+// elements of array and maps should be escaped for proper parsing)
+#define INI_ESCAPE_CHARACTER		'\\'
+// Symbol, separating key from value in map
+#define INI_MAP_KEY_VAL_DELIMETER   ':'
 // Delimiter, separating parent name from child name in section full name
-#define INI_SUBSECTION_DELIMETER '.'
+#define INI_SUBSECTION_DELIMETER    '.'
 // Delimiter to separate section name from value name when getting value directly from file
 #define INI_SECTION_VALUE_DELIMETER ':'
 
@@ -303,97 +315,58 @@ namespace INI
 	// forward declarations
 	class Value;
 	class Array;
+	class Map;
 	class Section;
 	class File;
 	typedef std::vector<Section*> SectionVector;
     
 	/**
-	  * Value to be stored in INI-file
-	  * This is a simple reference-counting class, storing a pointer to original string
-	  * It has some functions for easy converting to\from other types
-	  * Value can contain array (in string representation) and be converted to\from it 
+	  * Reference-counting helper class
+	  * This should be used as a member in reference-counting classes Value, Array and Map
 	**/
-	class Value
+	template<class T> class RefCountPtr
 	{
 	public:
-		Value():_ptr(NULL){}
-		Value(const Value& cp):_ptr(cp._ptr)
-		{
-			Increment();
-		}
-		Value& operator= (const Value& rt)
+		RefCountPtr():_ptr(NULL){}
+		RefCountPtr(const RefCountPtr& cp):_ptr(cp._ptr) {Increment();}
+		RefCountPtr(const T& val):_ptr(NULL){_ptr = new refcont(val);}
+		virtual ~RefCountPtr() {Decrement();}
+		RefCountPtr& operator= (const RefCountPtr& rt)
 		{
 			Decrement();
 			_ptr = rt._ptr;
 			Increment();
 			return *this;
 		}
-		template<class T> Value(const T& val):_ptr(NULL) {Set(val);}
-		Value(const char* value):_ptr(NULL){Set(value);}
-		virtual ~Value() { Decrement(); }
-		/// Template function to convert value to any type
-		template<class T> T Get() const
-		{
-			if (!_ptr)
-				return T();
-			return string_to_t<T>(_ptr->str);
-		}
-		void Set(const std::string& str)
-		{
-			Decrement();
-			_ptr = new val_cont();
-			_ptr->str = str;
-		}
-		/// Template function to set value
-		template<class T> void Set(const T& value)
-		{
-			Set(t_to_string(value));
-		}
-		// const char* (as any pointer) is defaulting in template to int or bool, which is not what we want
-		// This has a little optimization over Set(const std::string& str)
-		void Set(const char* value)
-		{
-			Decrement();
-			_ptr = new val_cont();
-			_ptr->str.assign(value);
-		}
-		template<class T> Value& operator= (const T& value)
-		{
-			Set(value);
-			return *this;
-		}
-		/// Converts Value to std::string
-		std::string AsString() const 
-		{
-			if (!_ptr)
-				return std::string();
-			return _ptr->str;
-		}
-		/// Converts Value to integer
-		int AsInt() const {return Get<int>();}
-		/// Converts Value to double
-		double AsDouble() const {return Get<double>();}
-		/// Converts Value to boolean
-		bool AsBool() const {return Get<bool>();}
-		/// Converts Value to Array
-		Array AsArray() const;
-		template<class T> T AsT() const {return Get<T>();}
-		bool operator== (const Value& val) 
+		bool operator== (const RefCountPtr& val) const
 		{
 			if (_ptr == val._ptr)
 				return true;
 			if (!_ptr || !val._ptr)
 				return false;
-			return _ptr->str == val._ptr->str;
+			return _ptr->val == val._ptr->val;
 		}
-		bool operator!= (const Value& val) { return !(*this == val);}
-	private:
-		struct val_cont
+		bool operator!= (const Value& val) const { return !(*this == val);}
+		bool IsValid() const {return (_ptr != NULL);}
+		T* DataPtr() {return (_ptr==NULL?NULL:&_ptr->val);}
+		const T* DataPtr() const { return (_ptr==NULL?NULL:&_ptr->val);}
+		T& Data() {return _ptr->val;}
+		const T& Data() const {return _ptr->val;}
+		T DataObj(const T& defval = T()) const {return (_ptr==NULL?defval:_ptr->val);}
+		T* operator->() {return DataPtr();}
+		const T* operator->() const {return DataPtr();}
+		void Copy()
 		{
-			val_cont() :count(1) {}
-			std::string str;
-			size_t count;
-		};
+			if (!_ptr)
+				_ptr = new refcont();
+			else if (_ptr->count > 1)
+			{
+				refcont* cp = new refcont(_ptr->val);
+				Decrement();
+				_ptr = cp;
+			}
+		}
+	private:
 		void Decrement()
 		{
 			if (!_ptr)
@@ -410,7 +383,69 @@ namespace INI
 			if (_ptr)
 				_ptr->count++;
 		}
-		val_cont* _ptr;
+		struct refcont
+		{
+			refcont() :count(1) {}
+			refcont(const T& pval) :val(pval), count(1) {}
+			T val;
+			size_t count;
+		};
+		refcont* _ptr;
+	};
+
+	/**
+	  * Value to be stored in INI-file
+	  * This is a simple reference-counting class, storing a pointer to original string
+	  * It has some functions for easy converting to\from other types
+	  * Value can contain array (in string representation) and be converted to\from it 
+	**/
+	class Value
+	{
+	public:
+		Value(){}
+		Value(const Value& cp):_val(cp._val){}
+		template<class T> Value(const T& val){Set(val);}
+		Value(const char* value){Set(value);}
+		virtual ~Value(){}
+
+		Value& operator= (const Value& rt) {_val = rt._val; return *this;}
+		template<class T> Value& operator= (const T& value) { Set(value); return *this;}
+		bool operator== (const Value& rgh) const { return _val == rgh._val;}
+		bool operator!= (const Value& val) const { return !(*this == val);}
+		bool operator< (const Value& rgh) const
+		{
+			if (!_val.IsValid())
+				return true;
+			if (!rgh._val.IsValid())
+				return false;
+			return (_val.Data() < rgh._val.Data());
+		}
+
+		/// Template function to convert value to any type
+		template<class T> T Get() const { return string_to_t<T>(_val.DataObj());}
+		void Set(const std::string& str) { _val = RefCountPtr<std::string>(str); }
+		/// Template function to set value
+		template<class T> void Set(const T& value) { Set(t_to_string(value)); }
+		// const char* (as any pointer) is defaulting in template to int or bool, which is not what we want
+		void Set(const char* value) { _val = RefCountPtr<std::string>(std::string(value)); }
+
+		/// Converts Value to std::string
+		std::string AsString() const { return _val.DataObj();}
+		/// Converts Value to integer
+		int AsInt() const {return Get<int>();}
+		/// Converts Value to double
+		double AsDouble() const {return Get<double>();}
+		/// Converts Value to boolean
+		bool AsBool() const {return Get<bool>();}
+		/// Converts Value to Array
+		Array AsArray() const;
+		/// Converts Value to Map
+		Map AsMap() const;
+		/// Converts Value to specified type T
+		template<class T> T AsT() const {return Get<T>();}
+
+	private:
+		RefCountPtr<std::string> _val;
 	};
 
 	/**
@@ -420,84 +455,155 @@ namespace INI
 	class Array
 	{
 	public:
-		Array():_ptr(NULL){}
-		Array(const Array& ar) :_ptr(ar._ptr) { Increment(); }
-		Array(const std::string& str, const std::string& sep = INI_ARRAY_DELIMITER):_ptr(NULL)
+		Array(){}
+		Array(const Array& cp) :_val(cp._val){}
+		Array(const std::string& str, char sep = INI_ARRAY_DELIMITER, char seg_open = INI_ARRAY_SEGMENT_OPEN,
+              char seg_close = INI_ARRAY_SEGMENT_CLOSE, char esc = INI_ESCAPE_CHARACTER)
 		{
-			FromString(str,sep);
+			FromString(str,sep,seg_open,seg_close,esc);
 		}
-		virtual ~Array() { Decrement(); }
-		Array& operator= (const Array& rt)
+		template<class T> Array(const std::vector<T>& vect){FromVector(vect);} 
+		virtual ~Array() {}
+
+		Array& operator= (const Array& rt) {_val = rt._val; return *this;}
+		Array& operator<< (const Value & val) { return PushBack(val);}
+		/// Returns reference to value on specified position @param pos
+		/// Array is automatically widen (if needed) for that operation to always succeed
+		Value& operator[] (size_t pos)
 		{
-			Decrement();
-			_ptr = rt._ptr;
-			Increment();
-			return *this;
+			_val.Copy();
+			if (pos >= _val->size())
+				_val->insert(_val->end(),pos-_val->size()+1,Value());
+			return _val.Data()[pos];
 		}
-		/// Formats string with all values of this array represented as strings, separated by @param sep
-		std::string ToString(const std::string& sep = INI_ARRAY_DELIMITER) const
-		{
-			std::string ret;
-			if (!_ptr)
-				return ret;
-			if (!_ptr->vector.size())
-				return ret;
-			for (size_t i = 0; i < _ptr->vector.size()-1; i++)
-				ret += _ptr->vector.at(i).AsString() + sep;
-			ret += _ptr->vector.at(_ptr->vector.size()-1).AsString();
-			return ret;
-		}
-		/// Fills array with values from string @param str, separated by @param sep
-		void FromString(const std::string& str, const std::string& sep = INI_ARRAY_DELIMITER)
-		{
-			Copy();
-			_ptr->vector.clear();
-			if (str.empty())
-				return;
-			size_t cur_pos = 0;
-			size_t prev_pos = 0;
-			for (; ; cur_pos+=sep.size(),prev_pos = cur_pos)
-			{
-				cur_pos = str.find(sep,cur_pos);
-				if (cur_pos == std::string::npos)
-					break;
-				std::string out = str.substr(prev_pos,cur_pos-prev_pos);
-				trim(out);
-				_ptr->vector.push_back(out);
-			}
-			std::string out = str.substr(prev_pos);
-			trim(out);
-			_ptr->vector.push_back(out);
-		}
+
 		/// Gets value with specified position @param pos
 		/// If @param pos is >= Size() returns @param def_val
 		Value GetValue(size_t pos, const Value& def_val = Value()) const
 		{
-			if (!_ptr)
+			if (!_val.IsValid())
 				return def_val;
-			if (pos >= _ptr->vector.size())
+			if (pos >= _val->size())
 				return def_val;
-			return _ptr->vector.at(pos);
+			return _val->at(pos);
 		}
 		/// Sets value @param value to specified position @param pos
 		/// Array is automatically widen (if needed) to allow this operation 
 		void SetValue(size_t pos, const Value& value)
 		{
-			Copy();
-			if (pos >= _ptr->vector.size())
+			_val.Copy();
+			if (pos >= _val->size())
 			{
-				_ptr->vector.insert(_ptr->vector.end(),pos-_ptr->vector.size(),Value());
-				_ptr->vector.push_back(value);
+				_val->insert(_val->end(),pos-_val->size(),Value());
+				_val->push_back(value);
 			}
 			else
-				_ptr->vector.at(pos) = value;
+				_val->at(pos) = value;
 		}
-		/// Pushes @param val value to back of the Array
+		/// Adds @param val to the end of the Array
 		Array& PushBack(const Value& val) 
 		{
-			Copy();
-			_ptr->vector.push_back(val); 
+			_val.Copy();
+			_val->push_back(val); 
 			return *this;
+		}
+		/// Returns array size
+		size_t Size() const { if (!_val.IsValid()) return 0; return _val->size(); }
+		
+		/// Formats string with all values of this array represented as strings, separated by @param sep
+		std::string ToString(char sep = INI_ARRAY_DELIMITER, char seg_open = INI_ARRAY_SEGMENT_OPEN,
+							 char seg_close = INI_ARRAY_SEGMENT_CLOSE, char esc = INI_ESCAPE_CHARACTER) const
+		{
+			std::string ret;
+			if (!_val.IsValid())
+				return ret;
+			for (size_t i = 0; i < _val->size(); i++)
+			{
+				std::string tmp = _val->at(i).AsString();
+				std::string out;
+				bool has_delim = false;
+				for (size_t j = 0; j < tmp.size(); j++)
+				{
+					if (tmp[j] == seg_open || tmp[j] == seg_close)
+						out.push_back(esc);
+					else if (tmp[j] == sep)
+						has_delim = true;
+					out.push_back(tmp[j]);
+				}
+				if (has_delim)
+					ret += seg_open + out + seg_close;
+				else
+					ret += out;
+				if (i != _val->size()-1)
+					ret += sep;
+			}
+			return ret;
+		}
+		/// Fills array with values from string @param str, separated by @param sep
+		void FromString(const std::string& str, char sep = INI_ARRAY_DELIMITER, 
+                        char seg_open  = INI_ARRAY_SEGMENT_OPEN,
+                        char seg_close = INI_ARRAY_SEGMENT_CLOSE, char esc = INI_ESCAPE_CHARACTER)
+		{
+			_val.Copy();
+			_val->clear();
+			if (str.empty())
+				return;
+			std::string cur_str;
+			int segm_cnt = 0;
+			bool escaped = false;
+			int preesc = 0;
+			for (size_t i = 0; i <= str.size(); ++i)
+			{
+				if (escaped && i < str.size())
+				{
+					cur_str.push_back(str[i]);
+					escaped = false;
+					if (str[i] == esc)
+						preesc = 2;
+				}
+				else if ((i == str.size()) || (str[i] == sep && !segm_cnt))
+				{
+					trim(cur_str);
+					_val->push_back(cur_str);
+					cur_str.clear();
+				}
+				else if (str[i] == seg_open && !preesc)
+				{
+					if (segm_cnt)
+						cur_str.push_back(str[i]);
+					segm_cnt++;
+				}
+				else if (str[i] == seg_close && !preesc)
+				{
+					segm_cnt--;
+					if (segm_cnt < 0)
+						segm_cnt = 0;
+					if (segm_cnt)
+						cur_str.push_back(str[i]);
+				}
+				else if (str[i] == esc)
+					escaped = true;
+				else
+					cur_str.push_back(str[i]);
+				if (preesc)
+					preesc--;
+			}
+		}
+		template<class T> std::vector<T> ToVector() const
+		{
+			std::vector<T> ret;
+			if (_val.IsValid())
+				return ret;
+			for (int i = 0; i < _val->size(); ++i)
+				ret.push_back(_val->at(i).AsT<T>());
+			return ret;
+		}
+		template<class T> void FromVector(const std::vector<T>& vect)
+		{
+			_val.Copy();
+			_val->clear();
+			for (size_t i = 0; i < vect.size(); ++i)
+				_val->push_back(Value(vect.at(i)));
 		}
 		/// Converts Array to Value
 		Value ToValue() const
@@ -509,55 +615,8 @@ namespace INI
 		{
 			FromString(val.AsString());
 		}
-		/// Returns array size
-		size_t Size() { if (!_ptr) return 0; return _ptr->vector.size(); }
-		/// Adds @param val to the end of the Array
-		Array& operator<< (const Value & val) { return PushBack(val);}
-		/// Returns reference to value on specified position @param pos
-		/// Array is automatically widen (if needed) for that operation to always succeed
-		Value& operator[] (size_t pos)
-		{
-			Copy();
-			if (pos >= _ptr->vector.size())
-				_ptr->vector.insert(_ptr->vector.end(),pos-_ptr->vector.size()+1,Value());
-			return _ptr->vector[pos];
-		}
 	private:
-		struct ar_cont
-		{
-			ar_cont() :count(1) {}
-			ar_cont(std::vector<Value>& vect) :vector(vect), count(1) {}
-			std::vector<Value> vector;
-			size_t count;
-		};
-		void Decrement()
-		{
-			if (!_ptr)
-				return;
-			_ptr->count--;
-			if (!_ptr->count)
-			{
-				delete(_ptr);
-				_ptr = NULL;
-			}
-		}
-		void Increment()
-		{
-			if (_ptr)
-				_ptr->count++;
-		}
-		void Copy()
-		{
-			if (!_ptr)
-				_ptr = new ar_cont();
-			else if (_ptr->count > 1)
-			{
-				ar_cont* cp = new ar_cont(_ptr->vector);
-				Decrement();
-				_ptr = cp;
-			}
-		}
-		ar_cont* _ptr;
+		RefCountPtr<std::vector<Value> > _val;
 	};
 
 	template<> inline void Value::Set<Array> (const Array& value)
@@ -566,11 +625,210 @@ namespace INI
 	}
 	template<> inline Array Value::Get<Array>() const
 	{
-		if (!_ptr)
+		if (!_val.IsValid())
 			return Array();
-		return Array(_ptr->str);
+		return Array(_val.Data());
 	}
 	inline Array Value::AsArray() const {return Get<Array>();}
+
+	/**
+	  * Map of Values
+	  * Reference-counting class
+	**/
+	class Map
+	{
+	public:
+		Map(){}
+		Map(const Map& cp) :_val(cp._val){}
+		Map(const std::string& str, char sep = INI_ARRAY_DELIMITER, char seg_open = INI_ARRAY_SEGMENT_OPEN,
+              char seg_close = INI_ARRAY_SEGMENT_CLOSE, char kval = INI_MAP_KEY_VAL_DELIMETER,
+			  char esc = INI_ESCAPE_CHARACTER)
+		{
+			FromString(str,sep,seg_open,seg_close,kval,esc);
+		}
+		template<class T, class M> Map(const std::map<T,M>& mp){FromMap(mp);} 
+		virtual ~Map(){}
+		Map& operator= (const Map& rt) {_val = rt._val; return *this;}
+		/// Returns reference to value of the specified key @param key
+		/// Map is automatically inserts entry for this operation to always succeed
+		Value& operator[] (const Value& key)
+		{
+			_val.Copy();
+			return _val.Data()[key];
+		}
+
+		/// Gets value for specified key @param key
+		/// If there is no specified key - returns @param def_val
+		Value GetValue(const Value& key, const Value& def_val = Value()) const
+		{
+			if (!_val.IsValid())
+				return def_val;
+			std::map<Value,Value>::const_iterator it = _val->find(key);
+			if (it == _val->end())
+				return def_val;
+			return it->second;
+		}
+		/// Sets value @param value to specified key @param key
+		void SetValue(const Value& key, const Value& value)
+		{
+			_val.Copy();
+			std::pair<std::map<Value,Value>::iterator,bool> res = 
+				_val->insert(std::pair<Value,Value>(key,value));
+			if (!res.second)
+				res.first->second = value;
+		}
+		/// Returns map size
+		size_t Size() const { if (!_val.IsValid()) return 0; return _val->size();}
+
+
+		/// Formats string with all values of this map
+		std::string ToString(char sep = INI_ARRAY_DELIMITER, char seg_open = INI_ARRAY_SEGMENT_OPEN,
+							 char seg_close = INI_ARRAY_SEGMENT_CLOSE, char kval = INI_MAP_KEY_VAL_DELIMETER, 
+							 char esc = INI_ESCAPE_CHARACTER) const
+		{
+			std::string ret;
+			if (!_val.IsValid())
+				return ret;
+			for (std::map<Value,Value>::const_iterator it = _val->begin(); it != _val->end(); ++it)
+			{
+				if (it != _val->begin())
+					ret += sep;
+				std::string key = it->first.AsString();
+				std::string out_key;
+				std::string val = it->second.AsString();
+				std::string out_val;
+				// key
+				bool has_delim = false;
+				for (size_t j = 0; j < key.size(); j++)
+				{
+					if (key[j] == seg_open || key[j] == seg_close)
+						out_key.push_back(esc);
+					else if (key[j] == kval || key[j] == sep)
+						has_delim = true;
+					out_key.push_back(key[j]);
+				}
+				if (has_delim)
+					out_key = seg_open + out_key + seg_close;
+				// value
+				has_delim = false;
+				for (size_t j = 0; j < val.size(); j++)
+				{
+					if (val[j] == seg_open || val[j] == seg_close)
+						out_val.push_back(esc);
+					else if (val[j] == kval || val[j] == sep)
+						has_delim = true;
+					out_val.push_back(val[j]);
+				}
+				if (has_delim)
+					out_val = seg_open + out_val + seg_close;
+				// pair
+				ret += out_key + kval + out_val;
+			}
+			return ret;
+		}
+		/// Fills map with values from string @param str
+		void FromString(const std::string& str, char sep = INI_ARRAY_DELIMITER, 
+                        char seg_open  = INI_ARRAY_SEGMENT_OPEN,
+                        char seg_close = INI_ARRAY_SEGMENT_CLOSE, char kval = INI_MAP_KEY_VAL_DELIMETER,
+						char esc = INI_ESCAPE_CHARACTER)
+		{
+			_val.Copy();
+			_val->clear();
+			if (str.empty())
+				return;
+			std::string cur_str;
+			std::string cur_key;
+			int segm_cnt = 0;
+			bool escaped = false;
+			int preesc = 0;
+			for (size_t i = 0; i <= str.size(); ++i)
+			{
+				if (escaped && i < str.size())
+				{
+					cur_str.push_back(str[i]);
+					escaped = false;
+					if (str[i] == esc)
+						preesc = 2;
+				}
+				else if ((i==str.size()) || (str[i] == sep && !segm_cnt))
+				{
+					trim(cur_str);
+					std::pair<std::map<Value,Value>::iterator,bool> res = 
+						_val->insert(std::pair<Value,Value>(Value(cur_key),Value(cur_str)));
+					if (!res.second)
+						res.first->second = cur_str;
+					cur_str.clear();
+					cur_key.clear();
+				}
+				else if (str[i] == kval && !segm_cnt)
+				{
+					trim(cur_str);
+					cur_key = cur_str;
+					cur_str.clear();
+				}
+				else if (str[i] == seg_open && !preesc)
+				{
+					if (segm_cnt)
+						cur_str.push_back(str[i]);
+					segm_cnt++;
+				}
+				else if (str[i] == seg_close && !preesc)
+				{
+					segm_cnt--;
+					if (segm_cnt < 0)
+						segm_cnt = 0;
+					if (segm_cnt)
+						cur_str.push_back(str[i]);
+				}
+				else if (str[i] == esc)
+					escaped = true;
+				else
+					cur_str.push_back(str[i]);
+				if (preesc)
+					preesc--;
+			}
+		}
+		template<class T, class M> std::map<T,M> ToMap() const
+		{
+			std::map<T,M> ret;
+			if (_val.IsValid())
+				return ret;
+			for (std::map<Value,Value>::iterator it = _val->begin(); it != _val->end(); ++it)
+				ret.insert(std::pair<T,M>(it->first.AsT<T>(),it->second.AsT<M>()));
+			return ret;
+		}
+		template<class T, class M> void FromMap(const std::map<T,M>& mp)
+		{
+			_val.Copy();
+			_val->clear();
+			for (typename std::map<T,M>::const_iterator it = mp.begin(); it != mp.end(); ++it)
+				_val->insert(std::pair<Value,Value>(Value(it->first),Value(it->second)));
+		}
+		/// Converts Array to Value
+		Value ToValue() const
+		{
+			return Value(ToString());
+		}
+		/// Gets Array from Value
+		void FromValue(const Value& val)
+		{
+			FromString(val.AsString());
+		}
+	private:
+		RefCountPtr<std::map<Value,Value> > _val;
+	};
+
+	template<> inline void Value::Set<Map> (const Map& value)
+	{
+		Set(value.ToString());
+	}
+	template<> inline Map Value::Get<Map>() const
+	{
+		if (!_val.IsValid())
+			return Map();
+		return Map(_val.Data());
+	}
+	inline Map Value::AsMap() const {return Get<Map>();}
 
 	/*---------------------------------------------------------------------------------------------------------------/
 	/ INI file creation and parsing
@@ -1233,6 +1491,10 @@ static inline std::istream& operator>> (std::istream& stream, INI::File& file)
 #undef INI_NAME_VALUE_SEP_CHARS
 #undef INI_MULTILINE_CHARS
 #undef INI_ARRAY_DELIMITER
+#undef INI_ARRAY_SEGMENT_OPEN
+#undef INI_ARRAY_SEGMENT_CLOSE
+#undef INI_ESCAPE_CHARACTER
+#undef INI_MAP_KEY_VAL_DELIMETER
 #undef INI_SUBSECTION_DELIMETER
 #undef INI_SECTION_VALUE_DELIMETER
 #undef INI_INCLUDE_SEQ

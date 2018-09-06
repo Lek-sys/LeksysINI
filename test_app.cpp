@@ -211,33 +211,86 @@ int main(int argc, char** argv)
 	}
 	std::cout << "[TEST10] passed" << std::endl;
 
-	// [TEST11] Optional. File loading
+	// [TEST11] Complex arrays test
+	ft.SetValue("MainProg2:cmp_array1", "{12,3}, {13,5}, {18,9} ");
+	ft.SetValue("MainProg2:cmp_array2", "Str1, Str2, {{Str3,,3}}, Str4\\,\\,\\{\\,\\,\\}, {Str5\\,,\\{\\{}");
+	{
+		INI::Value val = ft.GetSection("MainProg2")->GetValue("cmp_array1");
+		if (val.AsArray()[1].AsArray()[0].AsInt() != 13 || val.AsArray()[2].AsArray()[1].AsInt() != 9)
+		{
+			std::cerr << "Failed to pass [TEST11] (check 1)" << std::endl;
+			return 11;
+		}
+		val = ft.GetSection("MainProg2")->GetValue("cmp_array2");
+		val = val.AsArray().ToValue();
+		if (val.AsArray()[1].AsString() != "Str2" || val.AsArray()[2].AsString() != "{Str3,,3}"
+			|| val.AsArray()[3].AsString() != "Str4,,{,,}" || val.AsArray()[4].AsString() != "Str5,,{{")
+		{
+			std::cerr << "Failed to pass [TEST11] (check 2)" << std::endl;
+			return 11;
+		}
+	}
+	std::cout << "[TEST11] passed" << std::endl;
+
+	// [TEST12] Map test
+	ft.SetValue("MainProg2:map1","1:5, 1:3, 2:9, 3:10");
+	ft.SetValue("MainProg2:map2","Str1:5, Str2:3, Str3:{:,,:}");
+	ft.SetValue("MainProg2:map3","Str1:{Sub1,{\\,,\\\\{\\\\{Sub2,},{,:Sub3}}, Str2:1");
+	{
+		INI::Value val = ft.GetSection("MainProg2")->GetValue("map1");
+		val = val.AsMap().ToValue();
+		if (val.AsMap()[2].AsInt() != 9 || val.AsMap()[1].AsInt() != 3)
+		{
+			std::cerr << "Failed to pass [TEST12] (check 1)" << std::endl;
+			return 12;
+		}
+		val = ft.GetSection("MainProg2")->GetValue("map2");
+		INI::Map mp = val.AsMap();
+		if (val.AsMap()["Str2"].AsInt() != 3 || val.AsMap()["Str3"].AsString() != ":,,:")
+		{
+			std::cerr << "Failed to pass [TEST12] (check 2)" << std::endl;
+			return 12;
+		}
+		val = ft.GetSection("MainProg2")->GetValue("map3");
+		mp = val.AsMap().ToValue().AsMap();
+		std::string str = val.AsMap()["Str1"].AsArray()[1].AsString();
+		if (val.AsMap()["Str1"].AsArray()[1].AsString() != ",,{{Sub2," ||
+			val.AsMap()["Str1"].AsArray()[2].AsString() != ",:Sub3" ||
+			val.AsMap()["Str2"].AsInt() != 1)
+		{
+			std::cerr << "Failed to pass [TEST12] (check 3)" << std::endl;
+			return 12;
+		}
+	}
+	std::cout << "[TEST12] passed" << std::endl;
+
+	// [TEST13] Optional. File loading
 	if (!input_file.empty())
 	{
 		if (!ft.Load(input_file))
 		{
-			std::cerr << "Failed to pass optional [TEST11] (file loading). Error: " 
+			std::cerr << "Failed to pass optional [TEST13] (file loading). Error: " 
 				<< ft.LastResult().GetErrorDesc() << std::endl;
-			return 11;
+			return 13;
 		}
-		std::cout << "[TEST11] passed!" << std::endl;
+		std::cout << "[TEST13] passed!" << std::endl;
 	}
 	else
-		std::cout << "Optional [TEST11] (file loading) SKIPPED" << std::endl;
+		std::cout << "Optional [TEST13] (file loading) SKIPPED" << std::endl;
 
-	// [TEST12] Optional. File saving
+	// [TEST14] Optional. File saving
 	if (!output_file.empty())
 	{
 		if (!ft.Save(output_file))
 		{
-			std::cerr << "Failed to pass optional [TEST12] (file saving). Wrong output file. File contents comes next"
+			std::cerr << "Failed to pass optional [TEST14] (file saving). Wrong output file. File contents comes next"
 				<< std::endl << ft;
-			return 12;
+			return 14;
 		}
-		std::cout << "[TEST12] passed! (Look in " << output_file << " for your file)!" << std::endl;
+		std::cout << "[TEST14] passed! (Look in " << output_file << " for your file)!" << std::endl;
 	}
 	else
-		std::cout << "Optional [TEST12] (file saving) SKIPPED" << std::endl;
+		std::cout << "Optional [TEST14] (file saving) SKIPPED" << std::endl;
 
 	// [SUCCESS]
 	std::cout << "!!! [SUCCESS] !!! " << std::endl;
