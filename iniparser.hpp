@@ -594,7 +594,7 @@ namespace INI
             std::vector<T> ret;
             if (!_val.IsValid())
                 return ret;
-            for (int i = 0; i < _val->size(); ++i)
+            for (size_t i = 0; i < _val->size(); ++i)
                 ret.push_back(_val->at(i).AsT<T>());
             return ret;
         }
