@@ -592,7 +592,7 @@ namespace INI
         template<class T> std::vector<T> ToVector() const
         {
             std::vector<T> ret;
-            if (_val.IsValid())
+            if (!_val.IsValid())
                 return ret;
             for (int i = 0; i < _val->size(); ++i)
                 ret.push_back(_val->at(i).AsT<T>());
@@ -791,7 +791,7 @@ namespace INI
         template<class T, class M> std::map<T,M> ToMap() const
         {
             std::map<T,M> ret;
-            if (_val.IsValid())
+            if (!_val.IsValid())
                 return ret;
             for (std::map<Value,Value>::iterator it = _val->begin(); it != _val->end(); ++it)
                 ret.insert(std::pair<T,M>(it->first.AsT<T>(),it->second.AsT<M>()));
