@@ -1275,7 +1275,7 @@ namespace INI
                 if (pos == input_line.npos || pos == input_line.size()-1)
                     return ERROR;
                 ret = ENTRY;
-                key = input_line.substr(0,pos-1);
+                key = input_line.substr(0,pos);
                 trim(key);
                 last_pos = input_line.find_first_of(INI_COMMENT_CHARS,pos+1);
                 value = input_line.substr(pos+1,last_pos-pos-1);
