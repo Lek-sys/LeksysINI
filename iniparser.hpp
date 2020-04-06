@@ -793,7 +793,7 @@ namespace INI
             std::map<T,M> ret;
             if (!_val.IsValid())
                 return ret;
-            for (std::map<Value,Value>::iterator it = _val->begin(); it != _val->end(); ++it)
+            for (std::map<Value,Value>::const_iterator it = _val->begin(); it != _val->end(); ++it)
                 ret.insert(std::pair<T,M>(it->first.AsT<T>(),it->second.AsT<M>()));
             return ret;
         }
@@ -976,7 +976,7 @@ namespace INI
                 if (error_code == INI_ERR_INVALID_FILENAME)
                     return std::string("Failed to open file ") + file_name + "!";
                 if (error_code == INI_ERR_PARSING_ERROR)
-                    return std::string("Parse error in file ") + file_name + " on line ¹" 
+					return std::string("Parse error in file ") + file_name + " on line #"
                     + t_to_string(error_line) + ": \"" + error_line + "\""; 
                 return "Unknown error!";
             }
