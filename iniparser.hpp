@@ -183,9 +183,9 @@ namespace INI
     // Trim string from start
     static inline std::string &ltrim(std::string &s) {
 #if (__cplusplus >= 201103L)
-		s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) { return !__in_isspace(ch); }));
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) { return !__in_isspace(ch); }));
 #else
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(__in_isspace))));
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(__in_isspace))));
 #endif
         return s;
     }
@@ -193,9 +193,9 @@ namespace INI
     // Trim string from end
     static inline std::string &rtrim(std::string &s) {
 #if (__cplusplus >= 201103L)
-		s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) { return !__in_isspace(ch); }).base(), s.end());
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) { return !__in_isspace(ch); }).base(), s.end());
 #else
-		s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(__in_isspace))).base(), s.end());
+    s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(__in_isspace))).base(), s.end());
 #endif
         return s;
     }
