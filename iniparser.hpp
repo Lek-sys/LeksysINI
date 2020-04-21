@@ -1229,11 +1229,11 @@ namespace INI
     protected:
         enum LineType
         {
-            EMPTY,
-            SECTION,
-            ENTRY,
-            COMMENT,
-            ERROR
+            LEKSYSINI_EMPTY,
+            LEKSYSINI_SECTION,
+            LEKSYSINI_ENTRY,
+            LEKSYSINI_COMMENT,
+            LEKSYSINI_ERROR
         };
 
         /**
@@ -1249,14 +1249,14 @@ namespace INI
         LineType ParseLine(const std::string& input_line, std::string& section, 
                            std::string& key, std::string& value, std::string& comment) const
         {
-            LineType ret = EMPTY;
+            LineType ret = LEKSYSINI_EMPTY;
             size_t last_pos = input_line.npos;
             if (input_line.empty())
                 return ret;
             // comment parsing
             if (char_is_one_of(input_line.at(0),INI_COMMENT_CHARS))
             {
-                ret = COMMENT;
+                ret = LEKSYSINI_COMMENT;
                 // Can't do it that way, cause of 'initialization of non-const reference of type from a temporary of type'
                 // stupid GCC rule
                 //comment = trim(input_line.substr(1));
@@ -1269,8 +1269,8 @@ namespace INI
             {
                 last_pos = input_line.find_first_of(INI_SECTION_CLOSE_CHARS);
                 if (last_pos == input_line.npos)
-                    return ERROR;
-                ret = SECTION;
+                    return LEKSYSINI_ERROR;
+                ret = LEKSYSINI_SECTION;
                 section = input_line.substr(1,last_pos-1);
                 trim(section);
                 last_pos++;
@@ -1281,8 +1281,8 @@ namespace INI
                 size_t pos = input_line.find_first_of(INI_NAME_VALUE_SEP_CHARS);
                 // not section, not comment, not empty - error
                 if (pos == input_line.npos || pos == input_line.size()-1)
-                    return ERROR;
-                ret = ENTRY;
+                    return LEKSYSINI_ERROR;
+                ret = LEKSYSINI_ENTRY;
                 key = input_line.substr(0,pos);
                 trim(key);
                 last_pos = input_line.find_first_of(INI_COMMENT_CHARS,pos+1);
@@ -1342,18 +1342,18 @@ namespace INI
                 }
                 std::string section_key, value, comment;
                 LineType lt = ParseLine(line,section_key,section_key,value,comment);
-                if (lt == EMPTY)
+                if (lt == LEKSYSINI_EMPTY)
                 {
                     pcomment.clear();
                     continue;
                 }
-                else if (lt == ERROR)
+                else if (lt == LEKSYSINI_ERROR)
                 {
                     _result.Set(INI_ERR_PARSING_ERROR,lnc,line);
                     return 0;
                 }
                 // Handle inclusion
-                else if (lt == COMMENT && comment.substr(0,strlen(INI_INCLUDE_SEQ)) == INI_INCLUDE_SEQ)
+                else if (lt == LEKSYSINI_COMMENT && comment.substr(0,strlen(INI_INCLUDE_SEQ)) == INI_INCLUDE_SEQ)
                 {
                     std::string incname = comment.substr(strlen(INI_INCLUDE_SEQ));
                     trim(incname);
@@ -1385,7 +1385,7 @@ namespace INI
                 // Add comment (it can be set with any string type, other than EMPTY and ERROR)
                 pcomment += comment;
                 // Add section (or modify comment of existing one if needed)
-                if (lt == SECTION)
+                if (lt == LEKSYSINI_SECTION)
                 {
                     SectionMap::iterator it = pmap.find(section_key);
                     if (it == pmap.end())
@@ -1406,7 +1406,7 @@ namespace INI
                     }
                     pcomment.clear();
                 }
-                else if (lt == ENTRY)
+                else if (lt == LEKSYSINI_ENTRY)
                 {
                     // Try to create default section if it is not already in the array
                     if (!cur_sect)
